@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["rust/source"]
+
+[package]
+name = "streaming-metrics"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
