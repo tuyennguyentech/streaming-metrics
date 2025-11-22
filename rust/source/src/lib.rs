@@ -1,4 +1,4 @@
-pub mod axum_demo;
+pub mod server;
 
 use prometheus_client::{
   encoding::{EncodeLabelSet, EncodeLabelValue, text::encode},
@@ -7,7 +7,9 @@ use prometheus_client::{
 };
 
 #[allow(dead_code)]
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue)]
+#[derive(
+  Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue,
+)]
 enum Method {
   GET,
   PUT,

@@ -16,10 +16,14 @@ use prometheus_client::{
 };
 use tokio::{net::TcpListener, sync::Mutex};
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+  layer::SubscriberExt, util::SubscriberInitExt,
+};
 use uuid::uuid;
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue)]
+#[derive(
+  Clone, Debug, Hash, PartialEq, Eq, EncodeLabelValue,
+)]
 pub enum Method {
   GET,
   POST,
@@ -41,7 +45,9 @@ pub struct AppState {
   pub registry: Registry,
 }
 
-async fn metrics_handler(State(state): State<Arc<Mutex<AppState>>>) -> impl IntoResponse {
+async fn metrics_handler(
+  State(state): State<Arc<Mutex<AppState>>>,
+) -> impl IntoResponse {
   let state = state.lock().await;
   let mut buf = String::new();
   encode(&mut buf, &state.registry).unwrap();
@@ -90,16 +96,17 @@ async fn fluctuate_metrics_middleware(
   res
 }
 
-pub async fn demo() {
+pub async fn run() {
   tracing_subscriber::registry()
     .with(
-      tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        format!(
-          "{}=debug,tower_http=debug,axum::rejection=trace",
-          env!("CARGO_CRATE_NAME")
-        )
-        .into()
-      }),
+      tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| {
+          format!(
+            "{}=debug,tower_http=debug,axum::rejection=trace",
+            env!("CARGO_CRATE_NAME")
+          )
+          .into()
+        }),
     )
     .with(tracing_subscriber::fmt::layer())
     .init();
@@ -109,9 +116,11 @@ pub async fn demo() {
   let mut state = AppState {
     registry: Registry::default(),
   };
-  state
-    .registry
-    .register("requests", "Count of requests", metrics.requests.clone());
+  state.registry.register(
+    "requests",
+    "Count of requests",
+    metrics.requests.clone(),
+  );
   let metrics = Arc::new(Mutex::new(metrics));
   let state = Arc::new(Mutex::new(state));
 

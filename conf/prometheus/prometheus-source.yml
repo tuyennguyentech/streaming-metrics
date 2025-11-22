@@ -17,3 +17,6 @@ scrape_configs:
 
       static_configs:
           - targets: ["host.containers.internal:8081"]
+remote_write:
+    - url: http://host.containers.internal:1234/receive
+      protobuf_message: io.prometheus.write.v2.Request

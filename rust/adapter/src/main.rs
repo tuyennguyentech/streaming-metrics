@@ -1,4 +1,4 @@
 #[tokio::main]
 async fn main() {
-  source::server::run().await;
+  adapter::run().await;
 }
