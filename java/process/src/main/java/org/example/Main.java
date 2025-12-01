@@ -5,10 +5,15 @@ package org.example;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.configuration.*;
+import org.apache.flink.runtime.util.*;
 import org.apache.flink.streaming.api.datastream.*;
 import org.apache.flink.streaming.api.environment.*;
 
-public class App {
+import com.google.protobuf.util.JsonFormat;
+
+import io.prometheus.write.v2.Types.*;
+
+public class Main {
 
     public String getGreeting() {
         return "Hello World!";
@@ -19,7 +24,7 @@ public class App {
         String location = System.getProperty("java.home");
         System.out.println("Java Version: " + version);
         System.out.println("JVM Location: " + location);
-        System.out.println(new App().getGreeting());
+        System.out.println(new Main().getGreeting());
     }
 
     public static void main(String[] args) throws Exception {
@@ -40,6 +45,20 @@ public class App {
             }
         );
         ds.print();
+        System.out.println(EnvironmentInformation.getVersion());
+        var i = new InnerApp();
+        Request req = Request
+        .newBuilder()
+        .addTimeseries(TimeSeries.newBuilder())
+        .build();
+        System.out.println(JsonFormat.printer().print(req));
+        i.name();
         env.execute();
+    }
+}
+
+record InnerApp(String name) {
+    public InnerApp(){
+        this("");
     }
 }
