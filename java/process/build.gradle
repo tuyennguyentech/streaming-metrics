@@ -17,10 +17,15 @@ group = 'org.example'
 version = '1.0-SNAPSHOT'
 
 ext {
-    flinkVersion = '1.20.2'
+    flinkVersion = '1.20.3'
     slf4jVersion = '1.7.36'
     log4jVersion = '2.24.3'
     protobufVersion = '4.33.1'
+    chillProtobufVersion = '0.10.0'
+    kafkaConnectorVersion = '3.3.0-1.20'
+    gestaltVersion = '0.36.1'
+    snappyVersion = '1.1.10.8'
+    lombokVersion = '1.18.42'
 }
 
 tasks.withType(JavaCompile) {
@@ -38,14 +43,14 @@ repositories {
     }
 }
 
-configurations {
-    flinkShadowJar // dependencies which go into the shadowJar
-    // always exclude these (also from transitive dependencies) since they are provided by Flink
-    flinkShadowJar.exclude group: 'org.apache.flink', module: 'force-shading'
-    flinkShadowJar.exclude group: 'com.google.code.findbugs', module: 'jsr305'
-    flinkShadowJar.exclude group: 'org.slf4j'
-    flinkShadowJar.exclude group: 'org.apache.logging.log4j'
-}
+// configurations {
+//     flinkShadowJar // dependencies which go into the shadowJar
+//     // always exclude these (also from transitive dependencies) since they are provided by Flink
+//     flinkShadowJar.exclude group: 'org.apache.flink', module: 'force-shading'
+//     flinkShadowJar.exclude group: 'com.google.code.findbugs', module: 'jsr305'
+//     flinkShadowJar.exclude group: 'org.slf4j'
+//     flinkShadowJar.exclude group: 'org.apache.logging.log4j'
+// }
 
 dependencies {
     // Use JUnit Jupiter for testing.
@@ -55,12 +60,26 @@ dependencies {
 
     // This dependency is used by the application.
     implementation libs.guava
-    implementation "org.apache.flink:flink-streaming-java:${flinkVersion}"
-    implementation "org.apache.flink:flink-clients:${flinkVersion}"
-    implementation "org.apache.flink:flink-runtime-web:${flinkVersion}"
+    compileOnly "org.apache.flink:flink-streaming-java:${flinkVersion}"
+    compileOnly "org.apache.flink:flink-clients:${flinkVersion}"
+    compileOnly "org.apache.flink:flink-runtime-web:${flinkVersion}"
 
     implementation "com.google.protobuf:protobuf-java:${protobufVersion}"
     implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
+    implementation "com.twitter:chill-protobuf:${chillProtobufVersion}"
+
+    implementation "org.xerial.snappy:snappy-java:${snappyVersion}"
+
+    implementation "org.apache.flink:flink-connector-base:${flinkVersion}"
+    implementation "org.apache.flink:flink-connector-kafka:${kafkaConnectorVersion}"
+
+    implementation "com.github.gestalt-config:gestalt-core:${gestaltVersion}"
+
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+	annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+	testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+	testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     runtimeOnly "org.apache.logging.log4j:log4j-slf4j-impl:${log4jVersion}"
     runtimeOnly "org.apache.logging.log4j:log4j-api:${log4jVersion}"
@@ -68,11 +87,11 @@ dependencies {
 }
 
 sourceSets {
-    main.compileClasspath += configurations.flinkShadowJar
-    main.runtimeClasspath += configurations.flinkShadowJar
-    test.compileClasspath += configurations.flinkShadowJar
-    test.runtimeClasspath += configurations.flinkShadowJar
-    javadoc.classpath += configurations.flinkShadowJar
+    // main.compileClasspath += configurations.flinkShadowJar
+    // main.runtimeClasspath += configurations.flinkShadowJar
+    // test.compileClasspath += configurations.flinkShadowJar
+    // test.runtimeClasspath += configurations.flinkShadowJar
+    // javadoc.classpath += configurations.flinkShadowJar
     main {
         proto {
             srcDir '../../proto'
@@ -95,13 +114,19 @@ jar {
 }
 
 shadowJar {
-    configurations = [project.configurations.flinkShadowJar]
+    // configurations = [project.configurations.flinkShadowJar]
+    mergeServiceFiles()
+
+    // 3. Loại bỏ file rác chữ ký số để tránh lỗi Security khi chạy
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(11)
         vendor = JvmVendorSpec.AMAZON
     }
 }
@@ -109,10 +134,21 @@ java {
 application {
     // Define the main class for the application.
     mainClass = 'org.example.Main'
-    applicationDefaultJvmArgs = ["-Dlog4j.configurationFile=log4j2.properties"]
+    applicationDefaultJvmArgs = [
+        "-Dlog4j.configurationFile=log4j2.properties",
+        // "--add-opens=java.base/java.util=ALL-UNNAMED",
+        // "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        // "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        // "--add-opens=java.base/java.io=ALL-UNNAMED",
+        // "--add-opens=java.base/java.nio=ALL-UNNAMED"
+    ]
 }
 
 tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
+}
+
+tasks.named('run') {
+    classpath = sourceSets.main.runtimeClasspath + sourceSets.main.compileClasspath
 }

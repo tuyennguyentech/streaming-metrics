@@ -3,62 +3,97 @@
  */
 package org.example;
 
-import org.apache.flink.api.common.functions.MapFunction;
+import java.util.List;
+
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.*;
-import org.apache.flink.runtime.util.*;
-import org.apache.flink.streaming.api.datastream.*;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.core.execution.*;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.*;
+import org.example.conf.Environment;
+import org.example.conf.GestaltCache;
+import org.example.sources.RawMetrics;
+import org.slf4j.*;
 
 import com.google.protobuf.util.JsonFormat;
+import com.twitter.chill.protobuf.ProtobufSerializer;
 
-import io.prometheus.write.v2.Types.*;
+import io.prometheus.write.v2.Types.Request;
 
 public class Main {
+  @SuppressWarnings("unused")
+  private static final Logger LOG = LoggerFactory.getLogger(Main.class);
 
-    public String getGreeting() {
-        return "Hello World!";
+  public String getGreeting() {
+    return "Hello World!";
+  }
+
+  static Configuration createConf() {
+    Configuration conf = new Configuration();
+    conf.set(WebOptions.LOG_PATH, "logs/process.log");
+    conf.set(
+        PipelineOptions.SERIALIZATION_CONFIG,
+        List.of(String.format("%s: {type: kryo, kryo-type: registered, class: %s}",
+            Request.class.getName(),
+            ProtobufSerializer.class.getName())));
+    conf.set(RestOptions.PORT, 8083);
+    conf.set(CheckpointingOptions.CHECKPOINT_STORAGE, "filesystem");
+    conf.set(
+        CheckpointingOptions.CHECKPOINTS_DIRECTORY,
+        String.format(
+            "file://%s",
+            System.getProperty("user.dir") + "/checkpoints"));
+    return conf;
+  }
+
+  static StreamExecutionEnvironment createEnv(String[] args) throws Exception {
+    ParameterTool parameters = ParameterTool.fromArgs(args);
+    String environmentString = parameters.get("env", "local");
+    Environment environment = Environment.fromString(environmentString);
+    GestaltCache.setEnvironment(environment);
+    Configuration conf = createConf();
+    final StreamExecutionEnvironment env;
+    switch (environment) {
+      case LOCAL:
+        env = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(
+            conf);
+        break;
+      case DEV:
+        env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
+        break;
+      default:
+        throw new Exception("unsupported environment");
     }
 
-    static void helloWorld() {
-        String version = System.getProperty("java.version");
-        String location = System.getProperty("java.home");
-        System.out.println("Java Version: " + version);
-        System.out.println("JVM Location: " + location);
-        System.out.println(new Main().getGreeting());
-    }
+    env.enableCheckpointing(1000);
+    env.getCheckpointConfig().setCheckpointingConsistencyMode(CheckpointingMode.AT_LEAST_ONCE);
+    env.getCheckpointConfig().setMinPauseBetweenCheckpoints(500);
+    env.getCheckpointConfig()
+        .setExternalizedCheckpointRetention(
+            ExternalizedCheckpointRetention.RETAIN_ON_CANCELLATION);
 
-    public static void main(String[] args) throws Exception {
-        helloWorld();
-        final StreamExecutionEnvironment env =
-            StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(
-                new Configuration()
-            );
-        DataStream<Long> ds = env.fromSequence(0, 1L).setParallelism(10);
-        System.out.println(ds.getId());
-        ds = ds.map(
-            new MapFunction<Long, Long>() {
-                @Override
-                public Long map(Long value) throws Exception {
-                    Thread.sleep(1000);
-                    return value * 2;
-                }
-            }
-        );
-        ds.print();
-        System.out.println(EnvironmentInformation.getVersion());
-        var i = new InnerApp();
-        Request req = Request
-        .newBuilder()
-        .addTimeseries(TimeSeries.newBuilder())
-        .build();
-        System.out.println(JsonFormat.printer().print(req));
-        i.name();
-        env.execute();
-    }
-}
+    return env;
+  }
 
-record InnerApp(String name) {
-    public InnerApp(){
-        this("");
-    }
+  public static void main(String[] args) throws Exception {
+    final StreamExecutionEnvironment env = createEnv(args);
+
+    KafkaSource<Request> rawMetricsSource = RawMetrics.createSource();
+    DataStream<Request> rawMetrics = env
+        .fromSource(
+            rawMetricsSource,
+            WatermarkStrategy.forMonotonousTimestamps(),
+            "Raw Metrics Kafka Source")
+        .uid("raw-metrics-source");
+    rawMetrics
+        .map(request -> JsonFormat
+            .printer()
+            .print(request))
+        .uid("map-to-json-format")
+        .print()
+        .uid("print-sink");
+    env.execute();
+  }
 }

@@ -129,7 +129,7 @@ async fn handler_receive_prometheus_remote_write(
   };
   // tracing::debug!("content type = {}", content_type);
 
-  let buf = match decompress_body(body).await {
+  let buf = match decompress_body(body.clone()).await {
     Ok(buf) => buf,
     Err(res) => return res,
   };
@@ -177,7 +177,7 @@ async fn handler_receive_prometheus_remote_write(
   println!("{:?}", header_map);
   match state
     .producer
-    .produce("raw_metrics", b"", &buf, &[])
+    .produce("raw_metrics", b"", &body, &[])
     .await
   {
     Ok(_) => {

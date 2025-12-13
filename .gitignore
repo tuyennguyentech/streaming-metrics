@@ -8,5 +8,7 @@ build
 
 .settings
 java/**/bin
+java/**/logs
+java/process/checkpoints
 .project
 .classpath
