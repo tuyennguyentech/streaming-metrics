@@ -4,16 +4,20 @@
 package org.example;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.*;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.core.execution.*;
+import org.apache.flink.streaming.api.datastream.AsyncDataStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.*;
+import org.apache.flink.util.Collector;
 import org.example.conf.Environment;
 import org.example.conf.GestaltCache;
+import org.example.operators.MetadataEnrichment;
 import org.example.sources.RawMetrics;
 import org.slf4j.*;
 
@@ -59,6 +63,7 @@ public class Main {
       case LOCAL:
         env = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(
             conf);
+        env.setParallelism(1);
         break;
       case DEV:
         env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
@@ -87,13 +92,20 @@ public class Main {
             WatermarkStrategy.forMonotonousTimestamps(),
             "Raw Metrics Kafka Source")
         .uid("raw-metrics-source");
-    rawMetrics
-        .map(request -> JsonFormat
-            .printer()
-            .print(request))
-        .uid("map-to-json-format")
-        .print()
-        .uid("print-sink");
+
+    DataStream<Request> metadataEnrichedMetrics = AsyncDataStream.unorderedWait(rawMetrics, new MetadataEnrichment(), 1000, TimeUnit.MILLISECONDS, 100);
+
+    // DataStream<Request> tmp = rawMetrics.flatMap((Request value, Collector<Request> out) -> {
+      // System.out.println("get data");
+    // }).returns(Request.class);
+
+    // metadataEnrichedMetrics
+    //     .map(request -> JsonFormat
+    //         .printer()
+    //         .print(request))
+    //     .uid("map-to-json-format")
+    //     .print()
+    //     .uid("print-sink");
     env.execute();
   }
 }

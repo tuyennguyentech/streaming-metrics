@@ -44,7 +44,6 @@ services:
             - |
               FLINK_PROPERTIES=
               jobmanager.rpc.address: jobmanager
-
     taskmanager:
         image: flink:1.20.3-scala_2.12
         depends_on:
@@ -56,3 +55,13 @@ services:
               FLINK_PROPERTIES=
               jobmanager.rpc.address: jobmanager
               taskmanager.numberOfTaskSlots: 2
+    mongo:
+        image: mongo:8.2.3
+        environment:
+            MONGO_INITDB_ROOT_USERNAME: root
+            MONGO_INITDB_ROOT_PASSWORD: root
+            MONGO_INITDB_DATABASE: streamingMetrics
+        ports:
+          - 27017:27017
+        volumes:
+          - ./conf/mongodb:/docker-entrypoint-initdb.d
