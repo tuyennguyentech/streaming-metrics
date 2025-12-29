@@ -93,19 +93,19 @@ public class Main {
             "Raw Metrics Kafka Source")
         .uid("raw-metrics-source");
 
-    DataStream<Request> metadataEnrichedMetrics = AsyncDataStream.unorderedWait(rawMetrics, new MetadataEnrichment(), 1000, TimeUnit.MILLISECONDS, 100);
+    DataStream<Request> metadataEnrichedMetrics = AsyncDataStream.unorderedWait(rawMetrics, new MetadataEnrichment(), 100_000, TimeUnit.MILLISECONDS, 100);
 
     // DataStream<Request> tmp = rawMetrics.flatMap((Request value, Collector<Request> out) -> {
       // System.out.println("get data");
     // }).returns(Request.class);
 
-    // metadataEnrichedMetrics
-    //     .map(request -> JsonFormat
-    //         .printer()
-    //         .print(request))
-    //     .uid("map-to-json-format")
-    //     .print()
-    //     .uid("print-sink");
+    metadataEnrichedMetrics
+        .map(request -> JsonFormat
+            .printer()
+            .print(request))
+        .uid("map-to-json-format")
+        .print()
+        .uid("print-sink");
     env.execute();
   }
 }

@@ -1,7 +1,13 @@
 package org.example.operators;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.async.ResultFuture;
@@ -19,12 +25,14 @@ import org.reactivestreams.Subscription;
 import com.google.protobuf.util.JsonFormat;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.client.model.Filters;
 import com.mongodb.reactivestreams.client.MongoClient;
 import com.mongodb.reactivestreams.client.MongoClients;
 import com.mongodb.reactivestreams.client.MongoCollection;
 import com.mongodb.reactivestreams.client.MongoDatabase;
 
 import io.prometheus.write.v2.Types.Request;
+import io.prometheus.write.v2.Types.TimeSeries;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -79,12 +87,6 @@ public class MetadataEnrichment extends RichAsyncFunction<Request, Request> {
       client = MongoClients.create(settings);
       database = client.getDatabase(conf.mongo.database);
       collection = database.getCollection(conf.collection, Metadata.class);
-      // CodecRe
-      System.out.println("Return: " + Flux.from(collection.find())
-          .doOnNext(name -> System.out.println("Document: " + name)) // In từng tên
-          .doOnComplete(() -> System.out.println("Đã liệt kê xong!")) // In khi xong
-          .doOnError(e -> e.printStackTrace()) // In nếu lỗi
-          .blockLast());
     } catch (Exception e) {
       e.printStackTrace();
       throw e;
@@ -99,13 +101,117 @@ public class MetadataEnrichment extends RichAsyncFunction<Request, Request> {
 
   @Override
   public void timeout(Request input, ResultFuture<Request> resultFuture) throws Exception {
-    // super.timeout(input, resultFuture);
+    super.timeout(input, resultFuture);
     // resultFuture.complete(Collections.emptyList());
+  }
+
+  static Optional<String> getLabelValueByLabelName(
+      List<String> symbols,
+      List<Integer> refs,
+      String labelName) {
+    for (int i = 0; i < refs.size(); i += 2) {
+      if (labelName.equals(symbols.get(refs.get(i)))) {
+        return Optional.of(symbols.get(refs.get(i + 1)));
+      }
+    }
+    return Optional.empty();
+  }
+
+  static int getOrAddSymbol(List<String> symbols, String symbol) {
+    int idx = symbols.indexOf(symbol);
+    if (idx >= 0) {
+      return idx;
+    }
+    symbols.add(symbol);
+    return symbols.size() - 1;
+  }
+
+  static List<Integer> enrichLabels(
+      TimeSeries ts,
+      List<String> symbols,
+      Metadata metadata) {
+    Map<String, String> labels = new HashMap<>();
+
+    List<Integer> refs = ts.getLabelsRefsList();
+    for (int i = 0; i < refs.size(); i += 2) {
+      labels.put(symbols.get(refs.get(i)), symbols.get(refs.get(i + 1)));
+    }
+
+    labels.put("service", metadata.service);
+    labels.put("team", metadata.team);
+    labels.put("tier", metadata.tier);
+
+    List<String> names = new ArrayList<>(labels.keySet());
+    Collections.sort(names);
+
+    List<Integer> newRefs = new ArrayList<>(names.size() << 1);
+
+    for (String name : names) {
+      int nRef = getOrAddSymbol(symbols, name);
+      int vRef = getOrAddSymbol(symbols, labels.get(name));
+
+      newRefs.add(nRef);
+      newRefs.add(vRef);
+    }
+
+    return newRefs;
   }
 
   @Override
   public void asyncInvoke(Request input, ResultFuture<Request> resultFuture) throws Exception {
-    System.out.println(MetadataEnrichment.class.getName());
-    System.out.println(JsonFormat.printer().print(input));
+    List<String> symbols = new ArrayList<>(input.getSymbolsList());
+    List<TimeSeries> series = input.getTimeseriesList();
+
+    Set<String> pods = new HashSet<>();
+    for (TimeSeries ts : series) {
+      getLabelValueByLabelName(
+          symbols,
+          ts.getLabelsRefsList(),
+          "pod")
+          .ifPresent(podName -> pods.add(podName));
+    }
+    if (pods.isEmpty()) {
+      resultFuture.complete(Collections.singleton(input));
+      return;
+    }
+    Flux.from(collection.find(Filters.in("pod", pods)))
+        .collectMap(m -> m.pod)
+        .subscribe(
+            metadataByPodName -> {
+              List<TimeSeries> enriched = new ArrayList<>(series.size());
+              for (TimeSeries ts : series) {
+                getLabelValueByLabelName(
+                    symbols,
+                    ts.getLabelsRefsList(), "pod")
+                    .ifPresentOrElse(podName -> {
+                      Metadata metadata = metadataByPodName.get(podName);
+                      if (metadata == null) {
+                        enriched.add(ts);
+                        return;
+                      }
+                      List<Integer> newRefs = enrichLabels(ts, symbols, metadata);
+                      enriched.add(
+                          ts.toBuilder()
+                              .clearLabelsRefs()
+                              .addAllLabelsRefs(newRefs)
+                              .build());
+
+                    }, () -> {
+                      enriched.add(ts);
+                    });
+              }
+              resultFuture.complete(
+                  Collections.singleton(
+                      input.toBuilder()
+                          .clearSymbols()
+                          .addAllSymbols(symbols)
+                          .clearTimeseries()
+                          .addAllTimeseries(enriched)
+                          .build()));
+            },
+            err -> {
+              err.printStackTrace();
+              resultFuture.complete(Collections.emptyList());
+            });
   }
 }
