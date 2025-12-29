@@ -14,10 +14,11 @@ import org.apache.flink.core.execution.*;
 import org.apache.flink.streaming.api.datastream.AsyncDataStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.*;
-import org.apache.flink.util.Collector;
 import org.example.conf.Environment;
 import org.example.conf.GestaltCache;
 import org.example.operators.MetadataEnrichment;
+import org.example.operators.ViewDuplication;
+import org.example.sinks.ViewDuplicatedMetrics;
 import org.example.sources.RawMetrics;
 import org.slf4j.*;
 
@@ -67,6 +68,7 @@ public class Main {
         break;
       case DEV:
         env = StreamExecutionEnvironment.getExecutionEnvironment(conf);
+        env.setParallelism(2);
         break;
       default:
         throw new Exception("unsupported environment");
@@ -95,11 +97,12 @@ public class Main {
 
     DataStream<Request> metadataEnrichedMetrics = AsyncDataStream.unorderedWait(rawMetrics, new MetadataEnrichment(), 100_000, TimeUnit.MILLISECONDS, 100);
 
+    DataStream<Request> viewDuplicatedMetrics = AsyncDataStream.unorderedWait(metadataEnrichedMetrics, new ViewDuplication(), 100_000, TimeUnit.MILLISECONDS, 100);
     // DataStream<Request> tmp = rawMetrics.flatMap((Request value, Collector<Request> out) -> {
       // System.out.println("get data");
     // }).returns(Request.class);
-
-    metadataEnrichedMetrics
+    DataStream<Void> written = AsyncDataStream.unorderedWait(viewDuplicatedMetrics, new ViewDuplicatedMetrics(), 100_000, TimeUnit.MILLISECONDS, 100);
+    viewDuplicatedMetrics
         .map(request -> JsonFormat
             .printer()
             .print(request))

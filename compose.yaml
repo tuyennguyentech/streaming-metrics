@@ -32,7 +32,7 @@ services:
     prometheus-source:
         image: prom/prometheus
         ports:
-            - 9090:9090
+            - 9091:9090
         volumes:
             - ./conf/prometheus/prometheus-source.yml:/etc/prometheus/prometheus.yml
     jobmanager:
@@ -65,3 +65,14 @@ services:
           - 27017:27017
         volumes:
           - ./conf/mongodb:/docker-entrypoint-initdb.d
+    prometheus-sink:
+        image: prom/prometheus
+        ports:
+            - 9090:9090
+        command:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --web.enable-remote-write-receiver
+            - --web.remote-write-receiver.accepted-protobuf-messages=io.prometheus.write.v2.Request
+        volumes:
+            - ./conf/prometheus/prometheus-sink.yml:/etc/prometheus/prometheus.yml

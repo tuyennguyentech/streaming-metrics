@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import org.apache.flink.configuration.Configuration;
@@ -17,12 +16,7 @@ import org.bson.codecs.configuration.CodecRegistry;
 import org.bson.codecs.pojo.PojoCodecProvider;
 import org.example.conf.GestaltCache;
 import org.example.conf.Mongo;
-import org.github.gestalt.config.Gestalt;
 import org.github.gestalt.config.annotations.ConfigPrefix;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
-
-import com.google.protobuf.util.JsonFormat;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
 import com.mongodb.client.model.Filters;
@@ -65,7 +59,6 @@ public class MetadataEnrichment extends RichAsyncFunction<Request, Request> {
   public void open(Configuration parameters) throws Exception {
     super.open(parameters);
     Conf conf = GestaltCache.getGestalt().getConfig("operators", Conf.class);
-    // System.out.println(conf);
 
     String uri = String.format(
         "mongodb://%s:%s@%s:%d",
@@ -105,27 +98,6 @@ public class MetadataEnrichment extends RichAsyncFunction<Request, Request> {
     // resultFuture.complete(Collections.emptyList());
   }
 
-  static Optional<String> getLabelValueByLabelName(
-      List<String> symbols,
-      List<Integer> refs,
-      String labelName) {
-    for (int i = 0; i < refs.size(); i += 2) {
-      if (labelName.equals(symbols.get(refs.get(i)))) {
-        return Optional.of(symbols.get(refs.get(i + 1)));
-      }
-    }
-    return Optional.empty();
-  }
-
-  static int getOrAddSymbol(List<String> symbols, String symbol) {
-    int idx = symbols.indexOf(symbol);
-    if (idx >= 0) {
-      return idx;
-    }
-    symbols.add(symbol);
-    return symbols.size() - 1;
-  }
-
   static List<Integer> enrichLabels(
       TimeSeries ts,
       List<String> symbols,
@@ -147,8 +119,8 @@ public class MetadataEnrichment extends RichAsyncFunction<Request, Request> {
     List<Integer> newRefs = new ArrayList<>(names.size() << 1);
 
     for (String name : names) {
-      int nRef = getOrAddSymbol(symbols, name);
-      int vRef = getOrAddSymbol(symbols, labels.get(name));
+      int nRef = Utils.getOrAddSymbol(symbols, name);
+      int vRef = Utils.getOrAddSymbol(symbols, labels.get(name));
 
       newRefs.add(nRef);
       newRefs.add(vRef);
@@ -164,7 +136,7 @@ public class MetadataEnrichment extends RichAsyncFunction<Request, Request> {
 
     Set<String> pods = new HashSet<>();
     for (TimeSeries ts : series) {
-      getLabelValueByLabelName(
+      Utils.getLabelValueByLabelName(
           symbols,
           ts.getLabelsRefsList(),
           "pod")
@@ -180,7 +152,7 @@ public class MetadataEnrichment extends RichAsyncFunction<Request, Request> {
             metadataByPodName -> {
               List<TimeSeries> enriched = new ArrayList<>(series.size());
               for (TimeSeries ts : series) {
-                getLabelValueByLabelName(
+                Utils.getLabelValueByLabelName(
                     symbols,
                     ts.getLabelsRefsList(), "pod")
                     .ifPresentOrElse(podName -> {
