@@ -1,6 +1,7 @@
 package org.example.sources;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -25,8 +26,8 @@ public class RawMetrics {
     public org.example.conf.KafkaSource kafkaSource;
   }
 
-  public static KafkaSource<Request> createSource() throws Exception {
-    Gestalt gestalt = GestaltCache.getGestalt();
+  public static KafkaSource<Request> createSource(Map<String, String> globalJobParameters) throws Exception {
+    Gestalt gestalt = GestaltCache.getGestalt(globalJobParameters);
     Conf conf = gestalt.getConfig("sources", Conf.class);
     String bootstrapServers = conf.kafkaSource.brokers
         .parallelStream()

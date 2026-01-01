@@ -14,8 +14,8 @@ import org.apache.flink.core.execution.*;
 import org.apache.flink.streaming.api.datastream.AsyncDataStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.*;
+import org.apache.flink.streaming.api.functions.sink.v2.DiscardingSink;
 import org.example.conf.Environment;
-import org.example.conf.GestaltCache;
 import org.example.operators.MetadataEnrichment;
 import org.example.operators.ViewDuplication;
 import org.example.sinks.ViewDuplicatedMetrics;
@@ -57,7 +57,7 @@ public class Main {
     ParameterTool parameters = ParameterTool.fromArgs(args);
     String environmentString = parameters.get("env", "local");
     Environment environment = Environment.fromString(environmentString);
-    GestaltCache.setEnvironment(environment);
+    // GestaltCache.setEnvironment(environment);
     Configuration conf = createConf();
     final StreamExecutionEnvironment env;
     switch (environment) {
@@ -74,6 +74,8 @@ public class Main {
         throw new Exception("unsupported environment");
     }
 
+    env.getConfig().setGlobalJobParameters(parameters);
+
     env.enableCheckpointing(1000);
     env.getCheckpointConfig().setCheckpointingConsistencyMode(CheckpointingMode.AT_LEAST_ONCE);
     env.getCheckpointConfig().setMinPauseBetweenCheckpoints(500);
@@ -86,8 +88,7 @@ public class Main {
 
   public static void main(String[] args) throws Exception {
     final StreamExecutionEnvironment env = createEnv(args);
-
-    KafkaSource<Request> rawMetricsSource = RawMetrics.createSource();
+    KafkaSource<Request> rawMetricsSource = RawMetrics.createSource(env.getConfig().getGlobalJobParameters().toMap());
     DataStream<Request> rawMetrics = env
         .fromSource(
             rawMetricsSource,
@@ -102,6 +103,7 @@ public class Main {
       // System.out.println("get data");
     // }).returns(Request.class);
     DataStream<Void> written = AsyncDataStream.unorderedWait(viewDuplicatedMetrics, new ViewDuplicatedMetrics(), 100_000, TimeUnit.MILLISECONDS, 100);
+    written.sinkTo(new DiscardingSink<Void>());
     viewDuplicatedMetrics
         .map(request -> JsonFormat
             .printer()

@@ -1,16 +1,18 @@
 package org.example.conf;
 
+import java.util.Map;
+
+import org.apache.flink.api.java.utils.ParameterTool;
 import org.github.gestalt.config.Gestalt;
 import org.github.gestalt.config.builder.GestaltBuilder;
 import org.github.gestalt.config.source.ClassPathConfigSourceBuilder;
 
-import lombok.Setter;
-
 public class GestaltCache {
   static Gestalt gestalt;
-  @Setter
-  static Environment environment;
-  static void create() throws Exception {
+  static void create(Map<String, String> globalJobParameters) throws Exception {
+    ParameterTool parameters = ParameterTool.fromMap(globalJobParameters);
+    String environmentString = parameters.get("env", "local");
+    Environment environment = Environment.fromString(environmentString);
     var builder = new GestaltBuilder()
       .addSource(ClassPathConfigSourceBuilder.builder().setResource("/application.properties").build());
     if (environment.equals(Environment.DEV)) {
@@ -19,9 +21,9 @@ public class GestaltCache {
     gestalt = builder.build();
     gestalt.loadConfigs();
   }
-  public static Gestalt getGestalt() throws Exception {
+  public static Gestalt getGestalt(Map<String, String> globalJobParameters) throws Exception {
     if (gestalt == null) {
-      create();
+      create(globalJobParameters);
     }
     return gestalt;
   }

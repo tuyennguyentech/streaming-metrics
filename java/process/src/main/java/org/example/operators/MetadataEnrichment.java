@@ -58,7 +58,7 @@ public class MetadataEnrichment extends RichAsyncFunction<Request, Request> {
   @Override
   public void open(Configuration parameters) throws Exception {
     super.open(parameters);
-    Conf conf = GestaltCache.getGestalt().getConfig("operators", Conf.class);
+    Conf conf = GestaltCache.getGestalt(getRuntimeContext().getGlobalJobParameters()).getConfig("operators", Conf.class);
 
     String uri = String.format(
         "mongodb://%s:%s@%s:%d",

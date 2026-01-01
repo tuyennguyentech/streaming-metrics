@@ -29,8 +29,7 @@ public class ViewDuplicatedMetrics extends RichAsyncFunction<Request, Void> {
   @Override
   public void open(Configuration parameters) throws Exception {
     super.open(parameters);
-    conf = GestaltCache.getGestalt().getConfig("sinks", Conf.class);
-
+    conf = GestaltCache.getGestalt(getRuntimeContext().getGlobalJobParameters()).getConfig("sinks", Conf.class);
     client = HttpClient.create();
   }
 

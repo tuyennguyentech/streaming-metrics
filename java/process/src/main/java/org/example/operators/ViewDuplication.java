@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 
@@ -55,7 +56,7 @@ public class ViewDuplication extends RichAsyncFunction<Request, Request> {
   @Override
   public void open(Configuration parameters) throws Exception {
     super.open(parameters);
-    Conf conf = GestaltCache.getGestalt().getConfig("operators", Conf.class);
+    Conf conf = GestaltCache.getGestalt(getRuntimeContext().getGlobalJobParameters()).getConfig("operators", Conf.class);
 
     String uri = String.format(
         "mongodb://%s:%s@%s:%d",
@@ -104,6 +105,12 @@ public class ViewDuplication extends RichAsyncFunction<Request, Request> {
               List<TimeSeries> series = input.getTimeseriesList();
               List<TimeSeries> duplicated = new ArrayList<>(series.size() * dups.size());
               for (TimeSeries ts : series) {
+                Optional<String> name = Utils.getLabelValueByLabelName(symbols, ts.getLabelsRefsList(), "__name__");
+                if (name.isPresent() && !name.get().equals("order_create_failed_total")) {
+                  duplicated.add(ts);
+                  continue;
+                }
+
                 for (Duplication dup : dups) {
                   Map<String, String> newLabels = new TreeMap<>();
                   newLabels.put("view", dup.view);
