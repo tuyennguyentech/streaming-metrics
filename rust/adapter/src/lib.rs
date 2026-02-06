@@ -19,7 +19,7 @@ use tracing_subscriber::{
 };
 
 use crate::message_broker::{
-  Producer, kafka::KafkaProducerBuilder,
+  Producer, kafka::{BrokerAddr, KafkaProducerBuilder},
 };
 
 pub mod prometheus {
@@ -207,9 +207,9 @@ pub async fn run() {
     )
     .with(tracing_subscriber::fmt::layer())
     .init();
-
   let producer = KafkaProducerBuilder::new()
-    .set_bootstrap(&[SocketAddr::from(([127, 0, 0, 1], 19092))])
+    // .set_bootstrap(&[SocketAddr::from(([127, 0, 0, 1], 19092))])
+    .set_bootstrap(&[BrokerAddr::DomainName("broker".to_string(), 9092)])
     .build()
     .unwrap();
 

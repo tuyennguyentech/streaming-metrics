@@ -20,6 +20,11 @@ pub struct KafkaProducer {
   producer: FutureProducer,
 }
 
+pub enum BrokerAddr {
+  SocketAddr(SocketAddr),
+  DomainName(String, u16),
+}
+
 impl KafkaProducerBuilder {
   pub fn new() -> Self {
     KafkaProducerBuilder {
@@ -28,13 +33,20 @@ impl KafkaProducerBuilder {
   }
   pub fn set_bootstrap(
     mut self,
-    brokers: &[SocketAddr],
+    brokers: &[BrokerAddr],
   ) -> Self {
     self.client_config.set(
       "bootstrap.servers",
       brokers
         .iter()
-        .map(|addr| format!("{}:{}", addr.ip(), addr.port()))
+        .map(|addr| match addr {
+          BrokerAddr::SocketAddr(addr) => {
+            format!("{}:{}", addr.ip(), addr.port())
+          }
+          BrokerAddr::DomainName(domain, port) => {
+            format!("{}:{}", domain, port)
+          }
+        })
         .collect::<Vec<_>>()
         .join(","),
     );
